@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema Bambú - Comandas y Facturas</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: Arial; background:#f9f9f9; margin:0; padding:20px; }
+header { background:#3b7a57; color:white; padding:20px; text-align:center; }
+main { max-width:900px; margin:auto; padding:20px; }
+form { background:white; padding:15px; border-radius:8px; box-shadow:0 0 5px rgba(0,0,0,0.1); margin-bottom:20px; }
+input, select { padding:8px; margin:5px; width:calc(30% - 20px); }
+button { padding:10px 20px; margin-top:10px; background:#3b7a57; color:white; border:none; border-radius:5px; cursor:pointer; }
+table { width:100%; border-collapse:collapse; background:white; margin-bottom:20px; }
+th, td { padding:10px; border:1px solid #ddd; text-align:left; }
+.resumen { display:flex; flex-wrap:wrap; justify-content:space-between; background:#eaf3ea; padding:15px; margin-bottom:20px; border-radius:8px; }
+.resumen div { text-align:center; flex:1; margin:5px; min-width:100px; }
+</style>
+</head>
+<body>
+
+<header>
+<h1>Sistema Bambú - Comandas y Facturas</h1>
+</header>
+
+<main>
+<!-- LOGIN -->
+<div id="loginDiv">
+    <h2>Iniciar Sesión</h2>
+    <form id="loginForm">
+        <input type="text" id="username" placeholder="Usuario" required>
+        <input type="password" id="password" placeholder="Contraseña" required>
+        <br>
+        <button type="submit">Ingresar</button>
+    </form>
+</div>
+
+<div id="panelUsuario" style="display:none;">
+
+<!-- RESUMEN ADMIN -->
+<div class="resumen" id="resumenAdmin">
+  <div><h4>Ventas Hoy</h4><p id="ventasHoy">Q0.00</p></div>
+  <div><h4>Ventas Semana</h4><p id="ventasSemana">Q0.00</p></div>
+  <div><h4>Ventas Mes</h4><p id="ventasMes">Q0.00</p></div>
+  <div><h4>Ventas Año</h4><p id="ventasAno">Q0.00</p></div>
+  <div><h4>Gastos Hoy</h4><p id="gastosHoy">Q0.00</p></div>
+  <div><h4>Gastos Semana</h4><p id="gastosSemana">Q0.00</p></div>
+  <div><h4>Gastos Mes</h4><p id="gastosMes">Q0.00</p></div>
+  <div><h4>Gastos Año</h4><p id="gastosAno">Q0.00</p></div>
+</div>
+
+<!-- RESUMEN CAJA -->
+<div class="resumen" id="resumenCaja" style="display:none;">
+  <div><h4>Ventas Hoy</h4><p id="ventasHoyCaja">Q0.00</p></div>
+  <div><h4>Gastos Hoy</h4><p id="gastosHoyCaja">Q0.00</p></div>
+</div>
+
+<!-- FILTRO SOLO ADMIN -->
+<h3 id="filtroLabel">Filtrar por Fecha</h3>
+<select id="filtro">
+  <option value="all">Todos</option>
+  <option value="today">Hoy</option>
+  <option value="week">Esta Semana</option>
+  <option value="month">Este Mes</option>
+  <option value="year">Este Año</option>
+</select>
+
+<!-- COMANDAS -->
+<h3>Ingresar Comanda</h3>
+<form id="comandaForm">
+  <input id="numComanda" type="number" placeholder="Número de Comanda" required>
+  <input id="montoComanda" type="number" placeholder="Monto Total (Q)" step="0.01" required>
+  <br>
+  <button type="submit">Agregar Comanda</button>
+</form>
+
+<h3>Comandas Registradas</h3>
+<table>
+<thead>
+<tr><th>Número</th><th>Monto (Q)</th><th>Fecha</th><th>Acción</th></tr>
+</thead>
+<tbody id="tbodyComandas"></tbody>
+<tfoot>
+<tr><td><strong>Total</strong></td><td id="totalComandas">Q0.00</td><td colspan="2"></td></tr>
+</tfoot>
+</table>
+
+<!-- GRAFICA SOLO ADMIN -->
+<h3 id="graficaLabel">Gráfica de Ventas por Mes</h3>
+<canvas id="graficaComandas" width="800" height="300"></canvas>
+
+<!-- FACTURAS -->
+<h3>Ingresar Factura de Gasto</h3>
+<form id="facturaForm">
+  <input id="proveedor" placeholder="Proveedor" required>
+  <input id="tipoGasto" placeholder="Tipo de Gasto" required>
+  <input id="descripcion" placeholder="Descripción" required>
+  <input id="numFactura" type="number" placeholder="Número" required>
+  <input id="cantidad" type="number" placeholder="Cantidad (Q)" step="0.01" required>
+  <br>
+  <button type="submit">Agregar Factura</button>
+</form>
+
+<h3>Facturas Registradas</h3>
+<table>
+<thead>
+<tr><th>Proveedor</th><th>Tipo</th><th>Descripción</th><th>Número</th><th>Cantidad (Q)</th><th>Fecha</th><th>Acción</th></tr>
+</thead>
+<tbody id="tbodyFacturas"></tbody>
+</table>
+
+<button id="exportBtn">Exportar CSV</button>
+<button id="logoutBtn">Cerrar Sesión</button>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+  // --- USUARIOS ---
+  const users = [
+    {username:"caja", password:"caja123"},
+    {username:"admin", password:"admin123"}
+  ];
+
+  // --- DATOS ---
+  let comandas = JSON.parse(localStorage.getItem('comandas')) || [];
+  let facturas = JSON.parse(localStorage.getItem('facturas')) || [];
+
+  const tbodyComandas = document.getElementById('tbodyComandas');
+  const tbodyFacturas = document.getElementById('tbodyFacturas');
+  const totalComandas = document.getElementById('totalComandas');
+  const filtro = document.getElementById('filtro');
+  let chart;
+  let currentUser = null;
+
+  const resumenIds = ['ventasHoy','ventasSemana','ventasMes','ventasAno','gastosHoy','gastosSemana','gastosMes','gastosAno'];
+
+  function mismaFecha(f1, f2){
+    return f1.getFullYear() === f2.getFullYear() &&
+           f1.getMonth() === f2.getMonth() &&
+           f1.getDate() === f2.getDate();
+  }
+
+  // --- LOGIN ---
+  document.getElementById('loginForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value.trim();
+    const user = users.find(x=>x.username===u && x.password===p);
+    if(!user){ alert("Usuario o contraseña incorrectos"); return; }
+    currentUser = user;
+    document.getElementById('loginDiv').style.display='none';
+    document.getElementById('panelUsuario').style.display='block';
+
+    // Mostrar/Ocultar según rol
+    if(user.username === "caja"){
+      document.getElementById('resumenAdmin').style.display='none';
+      document.getElementById('resumenCaja').style.display='flex';
+      document.getElementById('filtro').style.display='none';
+      document.getElementById('filtroLabel').style.display='none';
+      document.getElementById('graficaComandas').style.display='none';
+      document.getElementById('graficaLabel').style.display='none';
+    } else {
+      document.getElementById('resumenAdmin').style.display='flex';
+      document.getElementById('resumenCaja').style.display='none';
+    }
+
+    renderComandas();
+    renderFacturas();
+    if(user.username === "admin") renderGrafica();
+    actualizarResumen();
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', ()=>location.reload());
+
+  function filtrarDatos(datos){
+    const value = filtro.value;
+    const ahora = new Date();
+    return datos.filter(d=>{
+      const fecha = new Date(d.fecha);
+      if(value==='today') return mismaFecha(fecha, ahora);
+      if(value==='week'){
+        const inicioSemana = new Date(ahora); inicioSemana.setDate(ahora.getDate() - ahora.getDay());
+        const finSemana = new Date(inicioSemana); finSemana.setDate(inicioSemana.getDate() + 6);
+        return fecha >= inicioSemana && fecha <= finSemana;
+      }
+      if(value==='month') return fecha.getMonth()===ahora.getMonth() && fecha.getFullYear()===ahora.getFullYear();
+      if(value==='year') return fecha.getFullYear()===ahora.getFullYear();
+      return true;
+    });
+  }
+
+  // --- COMANDAS ---
+  function renderComandas(){
+    tbodyComandas.innerHTML='';
+    let total=0;
+    const datos = currentUser.username==="admin" ? filtrarDatos(comandas) : comandas;
+    datos.forEach((c,i)=>{
+      total+=Number(c.monto) || 0;
+      const tr=document.createElement('tr');
+      const btn = document.createElement('button');
+      btn.textContent="Eliminar";
+      btn.style.cssText="background:#c0392b;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;";
+      btn.addEventListener('click', ()=>eliminarComanda(i));
+      tr.innerHTML=`<td>${c.numero}</td><td>Q${(Number(c.monto)||0).toFixed(2)}</td><td>${new Date(c.fecha).toLocaleString()}</td>`;
+      const tdAccion=document.createElement('td'); tdAccion.appendChild(btn); tr.appendChild(tdAccion);
+      tbodyComandas.appendChild(tr);
+    });
+    totalComandas.innerText=`Q${total.toFixed(2)}`;
+    actualizarResumen();
+  }
+
+  function eliminarComanda(i){
+    comandas.splice(i,1);
+    localStorage.setItem('comandas', JSON.stringify(comandas));
+    renderComandas();
+    if(currentUser.username==="admin") renderGrafica();
+  }
+
+  document.getElementById('comandaForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const numero = parseInt(document.getElementById('numComanda').value);
+    const monto = parseFloat(document.getElementById('montoComanda').value);
+    const fecha = new Date().toISOString();
+    comandas.push({numero,monto,fecha});
+    localStorage.setItem('comandas', JSON.stringify(comandas));
+    e.target.reset();
+    renderComandas();
+    if(currentUser.username==="admin") renderGrafica();
+  });
+
+  // --- GRAFICA ---
+  function renderGrafica(){
+    const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const datos = filtrarDatos(comandas);
+    const ventas=Array(12).fill(0);
+    datos.forEach(c=>{
+      const mes=new Date(c.fecha).getMonth();
+      ventas[mes]+=Number(c.monto) || 0;
+    });
+    if(chart) chart.destroy();
+    const ctx = document.getElementById('graficaComandas').getContext('2d');
+    chart=new Chart(ctx,{
+      type:'bar',
+      data:{labels:meses,datasets:[{label:'Ventas Q',data:ventas,backgroundColor:'#3b7a57'}]},
+      options:{responsive:true,scales:{y:{beginAtZero:true}}}
+    });
+  }
+
+  // --- FACTURAS ---
+  function renderFacturas(){
+    tbodyFacturas.innerHTML='';
+    const datos = currentUser.username==="admin" ? filtrarDatos(facturas) : facturas;
+    datos.forEach((f,i)=>{
+      const tr=document.createElement('tr');
+      const btn=document.createElement('button');
+      btn.textContent="Eliminar";
+      btn.style.cssText="background:#c0392b;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;";
+      btn.addEventListener('click', ()=>eliminarFactura(i));
+      tr.innerHTML=`<td>${f.proveedor}</td><td>${f.tipo}</td><td>${f.descripcion}</td><td>${f.numFactura}</td><td>Q${(Number(f.cantidad)||0).toFixed(2)}</td><td>${new Date(f.fecha).toLocaleString()}</td>`;
+      const tdAccion=document.createElement('td'); tdAccion.appendChild(btn); tr.appendChild(tdAccion);
+      tbodyFacturas.appendChild(tr);
+    });
+    actualizarResumen();
+  }
+
+  function eliminarFactura(i){
+    facturas.splice(i,1);
+    localStorage.setItem('facturas', JSON.stringify(facturas));
+    renderFacturas();
+  }
+
+  document.getElementById('facturaForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const proveedor = document.getElementById('proveedor').value.trim();
+    const tipoGasto = document.getElementById('tipoGasto').value.trim();
+    const descripcion = document.getElementById('descripcion').value.trim();
+    const numFactura = parseInt(document.getElementById('numFactura').value) || 0;
+    const cantidad = parseFloat(document.getElementById('cantidad').value) || 0;
+
+    if(!proveedor || !tipoGasto || !descripcion || !numFactura || !cantidad){
+      alert("Todos los campos son obligatorios y cantidad > 0");
+      return;
+    }
+
+    const fecha = new Date().toISOString();
+    const factura = {proveedor, tipo:tipoGasto, descripcion, numFactura, cantidad, fecha};
+    if(!Array.isArray(facturas)) facturas=[];
+    facturas.push(factura);
+    localStorage.setItem('facturas', JSON.stringify(facturas));
+    e.target.reset();
+    renderFacturas();
+  });
+
+  // --- RESUMEN ---
+  function actualizarResumen(){
+    const ahora = new Date();
+
+    if(currentUser.username==="caja"){
+      let totalHoy=0;
+      let gastosHoy=0;
+
+      // Ventas hoy
+      comandas.forEach(c=>{
+        const f = new Date(c.fecha);
+        if(mismaFecha(f, ahora)) totalHoy += Number(c.monto) || 0;
+      });
+
+      // Gastos hoy
+      facturas.forEach(fa=>{
+        const f = new Date(fa.fecha);
+        if(mismaFecha(f, ahora)) gastosHoy += Number(fa.cantidad) || 0;
+      });
+
+      document.getElementById('ventasHoyCaja').innerText = `Q${totalHoy.toFixed(2)}`;
+      document.getElementById('gastosHoyCaja').innerText = `Q${gastosHoy.toFixed(2)}`;
+    } else {
+      let ventas = {hoy:0, semana:0, mes:0, ano:0};
+      let gastos = {hoy:0, semana:0, mes:0, ano:0};
+
+      comandas.forEach(c=>{
+        const f = new Date(c.fecha);
+        const monto = Number(c.monto) || 0;
+        if(mismaFecha(f, ahora)) ventas.hoy += monto;
+        const inicioSemana = new Date(ahora); inicioSemana.setDate(ahora.getDate() - ahora.getDay());
+        const finSemana = new Date(inicioSemana); finSemana.setDate(inicioSemana.getDate() + 6);
+        if(f >= inicioSemana && f <= finSemana) ventas.semana += monto;
+        if(f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear()) ventas.mes += monto;
+        if(f.getFullYear() === ahora.getFullYear()) ventas.ano += monto;
+      });
+
+      facturas.forEach(fa=>{
+        const f = new Date(fa.fecha);
+        const cantidad = Number(fa.cantidad) || 0;
+        if(mismaFecha(f, ahora)) gastos.hoy += cantidad;
+        const inicioSemana = new Date(ahora); inicioSemana.setDate(ahora.getDate() - ahora.getDay());
+        const finSemana = new Date(inicioSemana); finSemana.setDate(inicioSemana.getDate() + 6);
+        if(f >= inicioSemana && f <= finSemana) gastos.semana += cantidad;
+        if(f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear()) gastos.mes += cantidad;
+        if(f.getFullYear() === ahora.getFullYear()) gastos.ano += cantidad;
+      });
+
+      resumenIds.forEach(id=>{
+        const el = document.getElementById(id);
+        switch(id){
+          case 'ventasHoy': el.innerText=`Q${ventas.hoy.toFixed(2)}`; break;
+          case 'ventasSemana': el.innerText=`Q${ventas.semana.toFixed(2)}`; break;
+          case 'ventasMes': el.innerText=`Q${ventas.mes.toFixed(2)}`; break;
+          case 'ventasAno': el.innerText=`Q${ventas.ano.toFixed(2)}`; break;
+          case 'gastosHoy': el.innerText=`Q${gastos.hoy.toFixed(2)}`; break;
+          case 'gastosSemana': el.innerText=`Q${gastos.semana.toFixed(2)}`; break;
+          case 'gastosMes': el.innerText=`Q${gastos.mes.toFixed(2)}`; break;
+          case 'gastosAno': el.innerText=`Q${gastos.ano.toFixed(2)}`; break;
+        }
+      });
+    }
+  }
+
+  // --- EXPORTAR CSV ---
+  document.getElementById('exportBtn').addEventListener('click', ()=>{
+    let csv="Número Comanda,Monto,Fecha\n";
+    comandas.forEach(c=>csv+=`${c.numero},${c.monto},${c.fecha}\n`);
+    csv+="\nFacturas de Gasto\nProveedor,Tipo,Descripción,Número,Cantidad,Fecha\n";
+    facturas.forEach(f=>csv+=`${f.proveedor},${f.tipo},${f.descripcion},${f.numFactura},${f.cantidad},${f.fecha}\n`);
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='registro_bambu.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // --- INICIO ---
+  renderComandas();
+  renderFacturas();
+  if(currentUser && currentUser.username==="admin") renderGrafica();
+  actualizarResumen();
+
+});
+</script>
+
+</body>
+</html>
